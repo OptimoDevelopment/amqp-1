@@ -154,6 +154,32 @@ func readTimestamp(r io.Reader) (v time.Time, err error) {
 }
 
 /*
+   TABLE_MAPPING = {
+    b'A': field_array,
+    b'D': decimal,
+    b'F': field_table,
+    b'I': long_int,
+    b'S': long_str,
+    b'T': timestamp,
+    b'V': void,
+
+    b'd': double,
+    b'f': floating_point,
+    b'l': long_long_int,
+    b's': short_int,
+    b't': boolean,
+    b'x': byte_array,
+
+    b'\x00': void,
+    b'u': short_uint,
+    b'B': short_short_int,
+    b'i': long_uint,
+    }  # Define a mapping for use in `field_array()` and `field_table()`
+
+ */
+
+
+/*
 'A': []interface{}
 'D': Decimal
 'F': Table
@@ -169,6 +195,59 @@ func readTimestamp(r io.Reader) (v time.Time, err error) {
 't': bool
 'x': []byte
 */
+
+/*
+   field-value         =
+ 'A' field-array
+ 'D' decimal-value
+ 'F' field-table
+ 'I' long-int
+ 'S' long-string
+ 'T' timestamp
+ 'V' ; no f
+ 'b' short-short-int
+ 'd' double
+ 'f' float
+ 'l' long-long-uint
+ 's' short-string
+ 't' boolean
+
+ 'B' short-short-uint
+ 'U' short-int
+ 'u' short-uint
+ 'i' long-uint
+ 'L' long-long-int
+
+ */
+
+/*
+       pub fn from_id(id: char) -> Option<AMQPType> {
+        match id {
+            'A' => Some(AMQPType::FieldArray),
+            'D' => Some(AMQPType::DecimalValue),
+            'F' => Some(AMQPType::FieldTable),
+            'I' => Some(AMQPType::LongInt),
+            'S' => Some(AMQPType::LongString),
+            'T' => Some(AMQPType::Timestamp),
+            'V' => Some(AMQPType::Void),
+            'b' => Some(AMQPType::ShortShortInt),
+            'd' => Some(AMQPType::Double),
+            'f' => Some(AMQPType::Float),
+            /* RabbitMQ treats both 'l' and 'L' as LongLongInt and ignores LongLongUInt
+            'L' | 'l' => Some(AMQPType::LongLongInt),
+            /* Specs says 'U', RabbitMQ says 's' (which means ShortString in specs)
+            's' | 'U' => Some(AMQPType::ShortInt),
+            't' => Some(AMQPType::Boolean),
+            'x' => Some(AMQPType::ByteArray),
+
+            'B' => Some(AMQPType::ShortShortUInt),
+            'u' => Some(AMQPType::ShortUInt),
+            'i' => Some(AMQPType::LongUInt),
+            _ => None,
+        }
+    }
+
+ */
 func readField(r io.Reader) (v interface{}, err error) {
 	var typ byte
 	if err = binary.Read(r, binary.BigEndian, &typ); err != nil {
@@ -183,15 +262,36 @@ func readField(r io.Reader) (v interface{}, err error) {
 		}
 		return (value != 0), nil
 
-	case 'b':
+	case 'B':
 		var value [1]byte
 		if _, err = io.ReadFull(r, value[0:1]); err != nil {
 			return
 		}
 		return value[0], nil
 
+	case 'b':
+		var value int8
+		if err = binary.Read(r, binary.BigEndian, &value); err != nil {
+			return
+		}
+		return value, nil
+
 	case 's':
 		var value int16
+		if err = binary.Read(r, binary.BigEndian, &value); err != nil {
+			return
+		}
+		return value, nil
+
+	case 'U':
+		var value int16
+		if err = binary.Read(r, binary.BigEndian, &value); err != nil {
+			return
+		}
+		return value, nil
+
+	case 'u':
+		var value uint16
 		if err = binary.Read(r, binary.BigEndian, &value); err != nil {
 			return
 		}
@@ -204,8 +304,22 @@ func readField(r io.Reader) (v interface{}, err error) {
 		}
 		return value, nil
 
+	case 'i':
+		var value uint32
+		if err = binary.Read(r, binary.BigEndian, &value); err != nil {
+			return
+		}
+		return value, nil
+
 	case 'l':
 		var value int64
+		if err = binary.Read(r, binary.BigEndian, &value); err != nil {
+			return
+		}
+		return value, nil
+
+	case 'L':
+		var value uint64
 		if err = binary.Read(r, binary.BigEndian, &value); err != nil {
 			return
 		}
